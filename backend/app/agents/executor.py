@@ -1,24 +1,26 @@
 """Agent execution system."""
-from typing import Optional, Dict, Any, List
-from datetime import datetime
-import json
 import asyncio
-from pydantic import BaseModel
-from app.tools.registry import get_tool_registry
-from app.observability.logging import get_logger, Metrics
+import json
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
+from app.observability.logging import Metrics, get_logger
+from app.tools.registry import get_tool_registry
+from pydantic import BaseModel
 
 logger = get_logger(__name__)
 
 
 class AgentMessage(BaseModel):
     """Agent message."""
+
     role: str  # "user", "assistant"
     content: str
 
 
 class AgentState(BaseModel):
     """Agent execution state."""
+
     agent_id: str
     conversation_history: List[AgentMessage] = []
     memory: Dict[str, Any] = {}
@@ -28,13 +30,14 @@ class AgentState(BaseModel):
 
 class ToolCall(BaseModel):
     """Tool call from agent."""
+
     tool_name: str
     tool_input: Dict[str, Any]
 
 
 class LLMProvider:
     """Abstract LLM provider."""
-    
+
     async def complete(
         self,
         messages: List[Dict[str, str]],
@@ -49,7 +52,7 @@ class LLMProvider:
 
 class MockLLMProvider(LLMProvider):
     """Mock LLM provider for testing."""
-    
+
     async def complete(
         self,
         messages: List[Dict[str, str]],
@@ -69,10 +72,10 @@ class MockLLMProvider(LLMProvider):
 
 class OpenAIProvider(LLMProvider):
     """OpenAI LLM provider."""
-    
+
     def __init__(self, api_key: str):
         self.api_key = api_key
-    
+
     async def complete(
         self,
         messages: List[Dict[str, str]],
@@ -84,9 +87,9 @@ class OpenAIProvider(LLMProvider):
         """Complete using OpenAI."""
         try:
             import openai
-            
+
             client = openai.AsyncOpenAI(api_key=self.api_key)
-            
+
             # Prepare tool definitions for OpenAI
             tool_definitions = None
             if tools:
@@ -101,7 +104,7 @@ class OpenAIProvider(LLMProvider):
                     }
                     for tool in tools
                 ]
-            
+
             response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -109,26 +112,28 @@ class OpenAIProvider(LLMProvider):
                 max_tokens=max_tokens or 1000,
                 tools=tool_definitions,
             )
-            
+
             choice = response.choices[0]
-            
+
             result = {
                 "content": choice.message.content or "",
                 "finish_reason": choice.finish_reason,
                 "tokens": response.usage.total_tokens if response.usage else 0,
             }
-            
+
             # Check for tool calls
             if choice.message.tool_calls:
                 tool_calls = []
                 for tool_call in choice.message.tool_calls:
-                    tool_calls.append({
-                        "tool_name": tool_call.function.name,
-                        "tool_input": json.loads(tool_call.function.arguments),
-                        "call_id": tool_call.id,
-                    })
+                    tool_calls.append(
+                        {
+                            "tool_name": tool_call.function.name,
+                            "tool_input": json.loads(tool_call.function.arguments),
+                            "call_id": tool_call.id,
+                        }
+                    )
                 result["tool_calls"] = tool_calls
-            
+
             return result
         except Exception as e:
             logger.error(f"OpenAI completion error: {str(e)}")
@@ -137,7 +142,7 @@ class OpenAIProvider(LLMProvider):
 
 class AgentExecutor:
     """Executes agent workflows with tool calling."""
-    
+
     def __init__(
         self,
         agent_id: str,
@@ -157,15 +162,15 @@ class AgentExecutor:
         self.llm_provider = llm_provider or MockLLMProvider()
         self.state = AgentState(agent_id=agent_id)
         self.tool_registry = get_tool_registry()
-    
+
     def add_memory(self, key: str, value: Any):
         """Add to agent memory."""
         self.state.memory[key] = value
-    
+
     def get_memory(self, key: str) -> Any:
         """Get from agent memory."""
         return self.state.memory.get(key)
-    
+
     async def execute(
         self,
         user_input: str,
@@ -173,28 +178,28 @@ class AgentExecutor:
     ) -> Dict[str, Any]:
         """Execute agent with user input."""
         logger.info(f"Starting agent execution: {self.agent_id}")
-        
+
         # Initialize conversation
         self.state.conversation_history = [
             AgentMessage(role="system", content=self.system_instructions),
             AgentMessage(role="user", content=user_input),
         ]
-        
+
         # Use all tools if not specified
         if tools is None:
             tools = self.tool_registry.list_tools()
-        
+
         # Execution loop
         final_response = None
         for iteration in range(self.max_iterations):
             self.state.iteration_count += 1
-            
+
             # Get LLM response
             messages = [
                 {"role": msg.role, "content": msg.content}
                 for msg in self.state.conversation_history
             ]
-            
+
             try:
                 response = await self.llm_provider.complete(
                     messages=messages,
@@ -210,9 +215,9 @@ class AgentExecutor:
                     "error": str(e),
                     "iterations": self.state.iteration_count,
                 }
-            
+
             self.state.total_tokens += response.get("tokens", 0)
-            
+
             # Check for tool calls
             if response.get("tool_calls"):
                 # Process tool calls
@@ -220,12 +225,12 @@ class AgentExecutor:
                 for tool_call in response["tool_calls"]:
                     tool_result = await self._execute_tool(tool_call)
                     tool_results.append(tool_result)
-                
+
                 # Add assistant response
                 self.state.conversation_history.append(
                     AgentMessage(role="assistant", content=response["content"])
                 )
-                
+
                 # Add tool results
                 for tool_result in tool_results:
                     self.state.conversation_history.append(
@@ -238,27 +243,27 @@ class AgentExecutor:
                     AgentMessage(role="assistant", content=final_response)
                 )
                 break
-        
+
         Metrics.record("agent_iterations", self.state.iteration_count)
         Metrics.record("agent_tokens", self.state.total_tokens)
-        
+
         return {
             "status": "completed",
             "response": final_response or response.get("content", ""),
             "iterations": self.state.iteration_count,
             "tokens": self.state.total_tokens,
         }
-    
+
     async def _execute_tool(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a single tool call."""
         tool_name = tool_call.get("tool_name")
         tool_input = tool_call.get("tool_input", {})
-        
+
         logger.info(f"Executing tool: {tool_name}")
-        
+
         try:
             result = await self.tool_registry.execute_tool(tool_name, tool_input)
-            
+
             return {
                 "tool_name": tool_name,
                 "status": "success",
@@ -276,12 +281,12 @@ class AgentExecutor:
 def get_llm_provider(api_key: Optional[str] = None) -> LLMProvider:
     """Get LLM provider based on configuration."""
     from app.config import settings
-    
+
     if api_key or settings.openai_api_key:
         try:
             return OpenAIProvider(api_key or settings.openai_api_key)
         except Exception as e:
             logger.warning(f"Failed to create OpenAI provider: {str(e)}, using mock")
             return MockLLMProvider()
-    
+
     return MockLLMProvider()

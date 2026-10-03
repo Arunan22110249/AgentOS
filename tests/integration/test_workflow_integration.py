@@ -1,12 +1,12 @@
 """Integration tests for workflow execution."""
-import pytest
 import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy import select
-from app.database.models import Base, Tenant, User, Workflow, WorkflowRun, WorkflowState
-from app.auth.service import AuthService, TenantService
-from app.observability.logging import get_logger
 
+import pytest
+from app.auth.service import AuthService, TenantService
+from app.database.models import Base, Tenant, User, Workflow, WorkflowRun, WorkflowState
+from app.observability.logging import get_logger
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 logger = get_logger(__name__)
 
@@ -18,25 +18,25 @@ TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 async def test_session():
     """Create test database session."""
     engine = create_async_engine(TEST_DB_URL, echo=False)
-    
+
     # Create tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     # Create session factory
     async_session_factory = async_sessionmaker(
         engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
-    
+
     async with async_session_factory() as session:
         yield session
-    
+
     # Cleanup
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-    
+
     await engine.dispose()
 
 
@@ -48,7 +48,7 @@ async def test_tenant_creation(test_session):
         name="test-tenant",
         description="Test tenant",
     )
-    
+
     assert success
     assert tenant.name == "test-tenant"
     assert tenant.is_active
@@ -63,7 +63,7 @@ async def test_user_registration(test_session):
         name="test-tenant",
     )
     assert success
-    
+
     # Register user
     success, user, error = await AuthService.register_user(
         test_session,
@@ -72,7 +72,7 @@ async def test_user_registration(test_session):
         username="testuser",
         password="securepass123",
     )
-    
+
     assert success
     assert user.email == "user@example.com"
     assert user.username == "testuser"
@@ -84,7 +84,7 @@ async def test_user_authentication(test_session):
     # Setup
     success, tenant, _ = await TenantService.create_tenant(test_session, "test-tenant")
     assert success
-    
+
     success, user, _ = await AuthService.register_user(
         test_session,
         tenant_id=tenant.id,
@@ -93,7 +93,7 @@ async def test_user_authentication(test_session):
         password="securepass123",
     )
     assert success
-    
+
     # Test authentication
     success, auth_user, error = await AuthService.authenticate_user(
         test_session,
@@ -101,10 +101,10 @@ async def test_user_authentication(test_session):
         email="user@example.com",
         password="securepass123",
     )
-    
+
     assert success
     assert auth_user.id == user.id
-    
+
     # Test wrong password
     success, auth_user, error = await AuthService.authenticate_user(
         test_session,
@@ -112,7 +112,7 @@ async def test_user_authentication(test_session):
         email="user@example.com",
         password="wrongpass",
     )
-    
+
     assert not success
 
 
@@ -122,7 +122,7 @@ async def test_workflow_creation(test_session):
     # Setup tenant
     success, tenant, _ = await TenantService.create_tenant(test_session, "test-tenant")
     assert success
-    
+
     # Create workflow
     workflow = Workflow(
         tenant_id=tenant.id,
@@ -135,11 +135,11 @@ async def test_workflow_creation(test_session):
             }
         },
     )
-    
+
     test_session.add(workflow)
     await test_session.commit()
     await test_session.refresh(workflow)
-    
+
     assert workflow.id is not None
     assert workflow.name == "test-workflow"
 
@@ -150,7 +150,7 @@ async def test_workflow_run_creation(test_session):
     # Setup
     success, tenant, _ = await TenantService.create_tenant(test_session, "test-tenant")
     assert success
-    
+
     workflow = Workflow(
         tenant_id=tenant.id,
         name="test-workflow",
@@ -163,7 +163,7 @@ async def test_workflow_run_creation(test_session):
     test_session.add(workflow)
     await test_session.commit()
     await test_session.refresh(workflow)
-    
+
     # Create run
     run = WorkflowRun(
         tenant_id=tenant.id,
@@ -171,11 +171,11 @@ async def test_workflow_run_creation(test_session):
         state=WorkflowState.PENDING,
         input_data={"key": "value"},
     )
-    
+
     test_session.add(run)
     await test_session.commit()
     await test_session.refresh(run)
-    
+
     assert run.id is not None
     assert run.state == WorkflowState.PENDING
     assert run.input_data == {"key": "value"}

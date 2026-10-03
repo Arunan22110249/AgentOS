@@ -1,15 +1,15 @@
 """Approval request management API routes."""
+from datetime import datetime
+from typing import List, Optional
+
+from app.api.auth_routes import verify_token
+from app.database.models import ApprovalRequest, ApprovalStatus, WorkflowRun
+from app.database.session import get_session
+from app.observability.logging import get_logger
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Optional, List
-from datetime import datetime
-from app.database.session import get_session
-from app.database.models import ApprovalRequest, WorkflowRun, ApprovalStatus
-from app.observability.logging import get_logger
-from app.api.auth_routes import verify_token
-
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -17,6 +17,7 @@ router = APIRouter()
 
 class ApprovalRequestResponse(BaseModel):
     """Approval request response."""
+
     id: str
     workflow_run_id: str
     title: str
@@ -28,6 +29,7 @@ class ApprovalRequestResponse(BaseModel):
 
 class ApprovalAction(BaseModel):
     """Approval action request."""
+
     status: str  # "APPROVED" or "REJECTED"
     reason: Optional[str] = None
 
@@ -42,19 +44,19 @@ async def list_approvals(
 ):
     """List pending approvals for tenant."""
     token_data = verify_token(authorization)
-    
-    query = select(ApprovalRequest).join(WorkflowRun).where(
-        WorkflowRun.tenant_id == token_data.tenant_id
+
+    query = (
+        select(ApprovalRequest)
+        .join(WorkflowRun)
+        .where(WorkflowRun.tenant_id == token_data.tenant_id)
     )
-    
+
     if status:
         query = query.where(ApprovalRequest.status == status)
-    
-    result = await session.execute(
-        query.offset(skip).limit(limit)
-    )
+
+    result = await session.execute(query.offset(skip).limit(limit))
     approvals = result.scalars().all()
-    
+
     return [
         ApprovalRequestResponse(
             id=a.id,
@@ -77,28 +79,30 @@ async def approve_request(
 ):
     """Approve a request."""
     token_data = verify_token(authorization)
-    
+
     # Get approval and verify tenant ownership
     result = await session.execute(
-        select(ApprovalRequest).join(WorkflowRun).where(
+        select(ApprovalRequest)
+        .join(WorkflowRun)
+        .where(
             ApprovalRequest.id == approval_id,
             WorkflowRun.tenant_id == token_data.tenant_id,
         )
     )
     approval = result.scalar_one_or_none()
-    
+
     if not approval:
         raise HTTPException(status_code=404, detail="Approval request not found")
-    
+
     # Update approval
     approval.status = ApprovalStatus.APPROVED
     approval.approved_by = token_data.user_id
     approval.approved_at = datetime.utcnow()
-    
+
     await session.commit()
-    
+
     logger.info(f"Approval approved: {approval_id}")
-    
+
     return {"status": "approved"}
 
 
@@ -111,27 +115,29 @@ async def reject_request(
 ):
     """Reject a request."""
     token_data = verify_token(authorization)
-    
+
     # Get approval and verify tenant ownership
     result = await session.execute(
-        select(ApprovalRequest).join(WorkflowRun).where(
+        select(ApprovalRequest)
+        .join(WorkflowRun)
+        .where(
             ApprovalRequest.id == approval_id,
             WorkflowRun.tenant_id == token_data.tenant_id,
         )
     )
     approval = result.scalar_one_or_none()
-    
+
     if not approval:
         raise HTTPException(status_code=404, detail="Approval request not found")
-    
+
     # Update approval
     approval.status = ApprovalStatus.REJECTED
     approval.approved_by = token_data.user_id
     approval.approved_at = datetime.utcnow()
     approval.rejection_reason = action.reason
-    
+
     await session.commit()
-    
+
     logger.info(f"Approval rejected: {approval_id}")
-    
+
     return {"status": "rejected"}

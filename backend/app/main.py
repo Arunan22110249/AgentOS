@@ -1,13 +1,21 @@
 """Main FastAPI application."""
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 import logging
+
+from app.api import (
+    agent_routes,
+    approval_routes,
+    auth_routes,
+    health_routes,
+    run_routes,
+    tool_routes,
+    workflow_routes,
+)
 from app.config import settings
 from app.database.session import create_tables, drop_tables
 from app.observability.logging import get_logger
-from app.api import auth_routes, workflow_routes, run_routes, agent_routes, tool_routes, approval_routes, health_routes
-
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 logger = get_logger(__name__)
 
@@ -41,7 +49,7 @@ app.include_router(health_routes.router, tags=["Health"])
 async def startup_event():
     """Application startup."""
     logger.info("Starting AgentOS API")
-    
+
     # Create tables
     await create_tables()
     logger.info("Database tables created")
@@ -65,7 +73,7 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         app,
         host=settings.api_host,

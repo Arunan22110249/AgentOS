@@ -1,10 +1,10 @@
 """Database connection and session management."""
 from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.pool import NullPool
+
 from app.config import settings
 from app.database.models import Base
-
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 # Create async engine
 engine = create_async_engine(
