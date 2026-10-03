@@ -1,14 +1,14 @@
 """Workflow run management API routes."""
+from typing import List, Optional
+
+from app.api.auth_routes import verify_token
+from app.database.models import ExecutionEvent, Workflow, WorkflowRun, WorkflowState
+from app.database.session import get_session
+from app.observability.logging import get_logger
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Optional, List
-from app.database.session import get_session
-from app.database.models import WorkflowRun, Workflow, WorkflowState, ExecutionEvent
-from app.observability.logging import get_logger
-from app.api.auth_routes import verify_token
-
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -16,12 +16,14 @@ router = APIRouter()
 
 class WorkflowRunCreate(BaseModel):
     """Create workflow run request."""
+
     workflow_id: str
     input_data: dict = {}
 
 
 class WorkflowRunResponse(BaseModel):
     """Workflow run response."""
+
     id: str
     workflow_id: str
     state: str
@@ -35,6 +37,7 @@ class WorkflowRunResponse(BaseModel):
 
 class WorkflowRunEvent(BaseModel):
     """Workflow run event."""
+
     event_id: str
     event_type: str
     created_at: str
@@ -50,7 +53,7 @@ async def create_workflow_run(
 ):
     """Create a new workflow run."""
     token_data = verify_token(authorization)
-    
+
     # Verify workflow exists and belongs to tenant
     result = await session.execute(
         select(Workflow).where(
@@ -59,10 +62,10 @@ async def create_workflow_run(
         )
     )
     workflow = result.scalar_one_or_none()
-    
+
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    
+
     # Create run
     run = WorkflowRun(
         tenant_id=token_data.tenant_id,
@@ -70,13 +73,13 @@ async def create_workflow_run(
         input_data=req.input_data,
         state=WorkflowState.PENDING,
     )
-    
+
     session.add(run)
     await session.commit()
     await session.refresh(run)
-    
+
     logger.info(f"Workflow run created: {run.id}")
-    
+
     return WorkflowRunResponse(
         id=run.id,
         workflow_id=run.workflow_id,
@@ -98,7 +101,7 @@ async def get_workflow_run(
 ):
     """Get a workflow run by ID."""
     token_data = verify_token(authorization)
-    
+
     result = await session.execute(
         select(WorkflowRun).where(
             WorkflowRun.id == run_id,
@@ -106,10 +109,10 @@ async def get_workflow_run(
         )
     )
     run = result.scalar_one_or_none()
-    
+
     if not run:
         raise HTTPException(status_code=404, detail="Workflow run not found")
-    
+
     return WorkflowRunResponse(
         id=run.id,
         workflow_id=run.workflow_id,
@@ -131,7 +134,7 @@ async def cancel_workflow_run(
 ):
     """Cancel a workflow run."""
     token_data = verify_token(authorization)
-    
+
     result = await session.execute(
         select(WorkflowRun).where(
             WorkflowRun.id == run_id,
@@ -139,15 +142,15 @@ async def cancel_workflow_run(
         )
     )
     run = result.scalar_one_or_none()
-    
+
     if not run:
         raise HTTPException(status_code=404, detail="Workflow run not found")
-    
+
     run.state = WorkflowState.CANCELLED
     await session.commit()
-    
+
     logger.info(f"Workflow run cancelled: {run_id}")
-    
+
     return {"status": "cancelled"}
 
 
@@ -161,7 +164,7 @@ async def get_workflow_run_events(
 ):
     """Get events for a workflow run."""
     token_data = verify_token(authorization)
-    
+
     # Verify run exists and belongs to tenant
     result = await session.execute(
         select(WorkflowRun).where(
@@ -171,7 +174,7 @@ async def get_workflow_run_events(
     )
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Workflow run not found")
-    
+
     # Get events
     events_result = await session.execute(
         select(ExecutionEvent)
@@ -181,7 +184,7 @@ async def get_workflow_run_events(
         .limit(limit)
     )
     events = events_result.scalars().all()
-    
+
     return [
         WorkflowRunEvent(
             event_id=e.id,

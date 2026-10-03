@@ -1,11 +1,10 @@
 """Health check API routes."""
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
+from app.config import settings
 from app.database.session import get_session
 from app.observability.logging import Metrics
-from app.config import settings
-
+from fastapi import APIRouter, Depends
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 

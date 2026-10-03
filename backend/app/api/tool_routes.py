@@ -1,15 +1,15 @@
 """Tool management API routes."""
+from typing import Any, Dict, List, Optional
+
+from app.api.auth_routes import verify_token
+from app.database.models import Tenant, Tool
+from app.database.session import get_session
+from app.observability.logging import get_logger
+from app.tools.registry import get_tool_registry
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Optional, List, Dict, Any
-from app.database.session import get_session
-from app.database.models import Tool, Tenant
-from app.tools.registry import get_tool_registry
-from app.observability.logging import get_logger
-from app.api.auth_routes import verify_token
-
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -17,6 +17,7 @@ router = APIRouter()
 
 class ToolCreate(BaseModel):
     """Create tool request."""
+
     name: str
     description: str
     input_schema: Dict[str, Any]
@@ -26,6 +27,7 @@ class ToolCreate(BaseModel):
 
 class ToolResponse(BaseModel):
     """Tool response."""
+
     id: str
     name: str
     description: str
@@ -44,14 +46,14 @@ async def create_tool(
 ):
     """Create a new tool."""
     token_data = verify_token(authorization)
-    
+
     # Verify tenant exists
     tenant_result = await session.execute(
         select(Tenant).where(Tenant.id == token_data.tenant_id)
     )
     if not tenant_result.scalar_one_or_none():
         raise HTTPException(status_code=403, detail="Tenant not found")
-    
+
     # Create tool
     tool = Tool(
         tenant_id=token_data.tenant_id,
@@ -61,13 +63,13 @@ async def create_tool(
         output_schema=req.output_schema,
         execution_timeout_seconds=req.execution_timeout_seconds,
     )
-    
+
     session.add(tool)
     await session.commit()
     await session.refresh(tool)
-    
+
     logger.info(f"Tool created: {tool.id}")
-    
+
     return ToolResponse(
         id=tool.id,
         name=tool.name,
@@ -89,7 +91,7 @@ async def list_tools(
 ):
     """List tools."""
     token_data = verify_token(authorization)
-    
+
     # Get tenant tools
     result = await session.execute(
         select(Tool)
@@ -98,11 +100,11 @@ async def list_tools(
         .limit(limit)
     )
     tools = result.scalars().all()
-    
+
     # Add built-in tools
     registry = get_tool_registry()
     builtin_tools = registry.list_tools()
-    
+
     tool_responses = [
         ToolResponse(
             id=t.id,
@@ -116,7 +118,7 @@ async def list_tools(
         )
         for t in tools
     ]
-    
+
     # Add built-in tools with synthetic IDs
     for bt in builtin_tools:
         tool_responses.append(
@@ -131,5 +133,5 @@ async def list_tools(
                 created_at="2024-01-01T00:00:00",
             )
         )
-    
+
     return tool_responses
