@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.venv/
+.venv_demo/
+venv/
+ENV/
+env/
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Frontend
+node_modules/
+dist/
+build/
+*.local
+
+# Kubernetes
+kubeconfig
+
+# Docker
+.docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# Artifacts
+outputs/
+outputs_demo/
+*.db
+*.sqlite
+
+# OS
+.DS_Store
+Thumbs.db
